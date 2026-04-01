@@ -20,6 +20,41 @@ const CodeEditor = () => {
   const [speed, setSpeed] = useState(1);
 
   // 🔥 Load saved files
+
+  useEffect(() => {
+    const files = JSON.parse(localStorage.getItem("saved-files")) || [];
+    setSavedFiles(files);
+  }, []);
+
+  useEffect(() => {
+    const savedCode = localStorage.getItem(`code-${language}`);
+    setValue(savedCode || CODE_SNIPPETS[language]);
+  }, [language]);
+
+    // ✅ STEP 3 ADD HERE
+  useEffect(() => {
+    return () => {
+      clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  // ✅ STEP 6 ADD HERE
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.ctrlKey && e.key === "Enter") {
+        if (!editorRef.current || !outputRef.current) return;
+
+        outputRef.current.runCode();
+      }
+    };
+
+    window.addEventListener("keydown", handleKey);
+
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, []);
+
   useEffect(() => {
     const files = JSON.parse(localStorage.getItem("saved-files")) || [];
     setSavedFiles(files);
@@ -80,8 +115,9 @@ const CodeEditor = () => {
 
     clearInterval(intervalRef.current);
 
-    // clear editor
     editorRef.current.setValue("");
+
+    const intervalTime = 50 / speed; // ✅ NEW
 
     intervalRef.current = setInterval(() => {
       const nextChar = replayCodeRef.current[replayIndexRef.current];
@@ -89,8 +125,17 @@ const CodeEditor = () => {
       if (nextChar !== undefined) {
         editorRef.current.executeEdits("", [
           {
-            range: editorRef.current.getModel().getFullModelRange(),
-            text: editorRef.current.getValue() + nextChar,
+            range: {
+              startLineNumber: editorRef.current.getModel().getLineCount(),
+              startColumn: editorRef.current.getModel().getLineMaxColumn(
+                editorRef.current.getModel().getLineCount()
+              ),
+              endLineNumber: editorRef.current.getModel().getLineCount(),
+              endColumn: editorRef.current.getModel().getLineMaxColumn(
+                editorRef.current.getModel().getLineCount()
+              ),
+            },
+            text: nextChar,
           },
         ]);
 
@@ -101,7 +146,7 @@ const CodeEditor = () => {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-    }, 50 / speed);
+    }, intervalTime); // ✅ use variable
   };
 
   const pauseReplay = () => {
@@ -149,6 +194,7 @@ const CodeEditor = () => {
 
       setValue(content);
       setFileName(file.name);
+      localStorage.setItem(`code-${language}`, content);
       e.target.value = null;
     };
 
@@ -231,7 +277,7 @@ const CodeEditor = () => {
             size="sm"
             bg="#00ffcc"
             color="black"
-            onClick={() => outputRef.current.runCode()}
+            onClick={() => outputRef.current?.runCode()}
           >
             ▶ Run
           </Button>

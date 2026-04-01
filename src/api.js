@@ -1,13 +1,11 @@
 // ==========================================
 // 🔥 JavaScript Execution (Offline + Input)
 // ==========================================
-export const runJavaScript = (code, input = "") => {
+export const runJavaScript = (code, inputs = []) => {
   let output = [];
+  let inputIndex = 0;
 
   try {
-    let inputs = input.split("\n");
-    let inputIndex = 0;
-
     const originalLog = console.log;
 
     // capture console.log
@@ -18,19 +16,18 @@ export const runJavaScript = (code, input = "") => {
     // fake prompt
     const prompt = (msg = "") => {
       const value = inputs[inputIndex++] || "";
-
-      if (msg) output.push(`> ${msg}`);
-      if (value) output.push(`> ${value}`);
-
       return value;
     };
 
-    // execute user code
-    new Function("prompt", code)(prompt);
+    // execute user code safely
+    new Function("console", "prompt", code)(
+      { log: console.log },
+      prompt
+    );
 
     console.log = originalLog;
 
-    return output.join("\n"); // ✅ clean output (no extra message)
+    return output.join("\n") || "> (no output)";
   } catch (error) {
     return "❌ Error: " + error.message;
   }
@@ -43,6 +40,7 @@ export const runJavaScript = (code, input = "") => {
 
 let pyodide = null;
 
+// load Pyodide only once
 export const loadPyodideInstance = async () => {
   if (pyodide) return pyodide;
 
@@ -57,15 +55,16 @@ export const loadPyodideInstance = async () => {
   return pyodide;
 };
 
-export const runPython = async (code, input = "") => {
+export const runPython = async (code, inputs = []) => {
   try {
     const py = await loadPyodideInstance();
 
-    const safeInput = input
-      .replace(/\\/g, "\\\\")
-      .replace(/"/g, '\\"');
+    // convert array → safe string
+    const safeInput = inputs
+      .map((i) => i.replace(/\\/g, "\\\\").replace(/"/g, '\\"'))
+      .join("\\n");
 
-    // 🔥 RESET ENVIRONMENT EVERY RUN
+    // reset Python environment each run
     py.runPython(`
 import sys
 from io import StringIO
@@ -80,20 +79,16 @@ def input(prompt=""):
     if input_index < len(input_data):
         value = input_data[input_index]
         input_index += 1
-        if prompt:
-            print("> " + prompt)
-        if value:
-            print("> " + value)
         return value
     return ""
 `);
 
-    // run user code
+    // execute user code
     py.runPython(code);
 
-    let output = py.runPython("sys.stdout.getvalue()");
+    const output = py.runPython("sys.stdout.getvalue()");
 
-    return output.trim();
+    return output.trim() || "> (no output)";
   } catch (error) {
     return "❌ Error: " + error.message;
   }
