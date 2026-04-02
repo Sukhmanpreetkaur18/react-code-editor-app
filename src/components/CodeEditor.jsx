@@ -22,11 +22,6 @@ const CodeEditor = () => {
   // 🔥 Load saved files
 
   useEffect(() => {
-    const files = JSON.parse(localStorage.getItem("saved-files")) || [];
-    setSavedFiles(files);
-  }, []);
-
-  useEffect(() => {
     const savedCode = localStorage.getItem(`code-${language}`);
     setValue(savedCode || CODE_SNIPPETS[language]);
   }, [language]);
@@ -39,21 +34,7 @@ const CodeEditor = () => {
   }, []);
 
   // ✅ STEP 6 ADD HERE
-  useEffect(() => {
-    const handleKey = (e) => {
-      if (e.ctrlKey && e.key === "Enter") {
-        if (!editorRef.current || !outputRef.current) return;
-
-        outputRef.current.runCode();
-      }
-    };
-
-    window.addEventListener("keydown", handleKey);
-
-    return () => {
-      window.removeEventListener("keydown", handleKey);
-    };
-  }, []);
+  
 
   useEffect(() => {
     const files = JSON.parse(localStorage.getItem("saved-files")) || [];
@@ -66,9 +47,17 @@ const CodeEditor = () => {
     setValue(savedCode || CODE_SNIPPETS[language]);
   }, [language]);
 
-  const onMount = (editor) => {
+  const onMount = (editor, monaco) => {
     editorRef.current = editor;
     editor.focus();
+
+    // ✅ Ctrl + Enter FIX (WORKS 100%)
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+      () => {
+        outputRef.current?.runCode();
+      }
+    );
   };
 
   const onSelect = (lang) => setLanguage(lang);
@@ -157,16 +146,27 @@ const CodeEditor = () => {
   const resumeReplay = () => {
     if (intervalRef.current) return;
 
+    const intervalTime = 50 / speed;
+
     intervalRef.current = setInterval(() => {
       const nextChar = replayCodeRef.current[replayIndexRef.current];
 
       if (nextChar !== undefined) {
         editorRef.current.executeEdits("", [
           {
-            range: editorRef.current.getModel().getFullModelRange(),
-            text: editorRef.current.getValue() + nextChar,
+            range: {
+              startLineNumber: editorRef.current.getModel().getLineCount(),
+              startColumn: editorRef.current.getModel().getLineMaxColumn(
+                editorRef.current.getModel().getLineCount()
+              ),
+              endLineNumber: editorRef.current.getModel().getLineCount(),
+              endColumn: editorRef.current.getModel().getLineMaxColumn(
+                editorRef.current.getModel().getLineCount()
+              ),
+            },
+            text: nextChar,
           },
-        ]);
+        ], true);
 
         replayIndexRef.current++;
       }
@@ -175,7 +175,7 @@ const CodeEditor = () => {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-    }, 50 / speed);
+     }, intervalTime);
   };
 
   // 📂 UPLOAD FILE

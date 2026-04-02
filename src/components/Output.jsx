@@ -14,55 +14,36 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
   const [inputs, setInputs] = useState([]);
   const [waitingForInput, setWaitingForInput] = useState(false);
   const [isRunning, setIsRunning] = useState(false);
+  const [expectedInputs, setExpectedInputs] = useState(0);
 
   const terminalRef = useRef(null);
+  const inputRef = useRef(null);
 
-  // ✅ Auto-scroll terminal
+  // auto scroll
   useEffect(() => {
-    if (terminalRef.current) {
-      terminalRef.current.scrollTop =
-        terminalRef.current.scrollHeight;
-    }
+    terminalRef.current?.scrollTo(0, terminalRef.current.scrollHeight);
   }, [terminal]);
 
+  // force focus
   useEffect(() => {
     if (waitingForInput) {
       setTimeout(() => {
-        const input = document.querySelector("input");
-        input?.focus();
-      }, 100);
+        inputRef.current?.focus();
+      }, 50);
     }
   }, [waitingForInput]);
 
-  // ✅ Add line
   const appendLine = (line) => {
     setTerminal((prev) => [...prev, line]);
   };
 
-  // ⚡ Streaming output (typing effect)
-  const streamOutput = async (text) => {
-    let buffer = "";
-    appendLine(""); // placeholder
-
-    for (let char of text) {
-      buffer += char;
-      setTerminal((prev) => {
-        const updated = [...prev];
-        updated[updated.length - 1] = buffer;
-        return updated;
-      });
-      await new Promise((r) => setTimeout(r, 5));
-    }
-  };
-
-  // 🧠 Extract prompt messages
   const extractPrompts = (code) => {
     const regex =
       language === "javascript"
         ? /prompt\(["'`](.*?)["'`]\)/g
         : /input\(["'`](.*?)["'`]\)/g;
 
-    const matches = [];
+    let matches = [];
     let match;
 
     while ((match = regex.exec(code)) !== null) {
@@ -72,7 +53,24 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
     return matches;
   };
 
-  // 🚀 RUN CODE
+  const executeCode = async (userInputs) => {
+    const code = editorRef.current.getValue();
+
+    try {
+      let result =
+        language === "javascript"
+          ? runJavaScript(code, userInputs)
+          : await runPython(code, userInputs);
+
+      appendLine("");
+      appendLine(result || "> (no output)");
+    } catch (err) {
+      appendLine("❌ Error: " + err.message);
+    }
+
+    setIsRunning(false);
+  };
+
   useImperativeHandle(ref, () => ({
     runCode: async () => {
       if (isRunning) return;
@@ -82,105 +80,69 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
       setCurrentInput("");
 
       const code = editorRef.current.getValue();
-
       const prompts = extractPrompts(code);
+      setExpectedInputs(prompts.length);
 
-      // ✅ If input needed
       if (prompts.length > 0) {
         setWaitingForInput(true);
 
-        prompts.forEach((p) => appendLine("> " + p));
+        appendLine("> Provide input:");
 
         return;
       }
 
-      // ✅ No input → run directly
       setIsRunning(true);
       await executeCode([]);
     },
+  }));
 
-  // ▶ Execute
-  const executeCode = async (userInputs) => {
-    const code = editorRef.current.getValue();
-    let result = "";
-
-    try {
-      if (language === "javascript") {
-        result = runJavaScript(code, userInputs);
-      } else {
-        result = await runPython(code, userInputs);
-      }
-
-      appendLine("");
-      await streamOutput(result || "> (no output)");
-
-    } catch (err) {
-      appendLine("❌ Error: " + err.message);
-    }
-
-    setIsRunning(true);
-  };
-
-  // ⌨ Handle Input
   const handleInputSubmit = async () => {
     if (!waitingForInput || isRunning) return;
 
-    // 💻 Commands
-    if (currentInput.startsWith("/")) {
-      if (currentInput === "/clear") {
-        setTerminal([]);
-        setCurrentInput("");
-        return;
-      }
-
-      if (currentInput === "/run") {
-        setWaitingForInput(false);
-        setIsRunning(false);
-        await executeCode(inputs);
-        return;
-      }
+    if (currentInput === "/clear") {
+      setTerminal([]);  
+      setCurrentInput("");
+      return;
     }
 
     appendLine("> " + currentInput);
-
-    setInputs((prev) => [...prev, currentInput]);
+    const newInputs = [...inputs, currentInput];
+    setInputs(newInputs);
     setCurrentInput("");
+    // 🔥 detect loop case
+    const n = parseInt(newInputs[0]);
 
+    // if only 1 prompt → simple case
+    if (expectedInputs === 1) {
+      setWaitingForInput(false);
+      setIsRunning(true);
+      await executeCode(newInputs);
+      setInputs([]);
+      return;
+    }
+
+    // 🔥 loop case (n + inputs)
+    if (!isNaN(n) && newInputs.length === n + 1) {
+      setWaitingForInput(false);
+      setIsRunning(true);
+
+      await executeCode(newInputs);
+
+      setInputs([]);
+    }
+  };
     
-  };
-
-  // 🧹 Clear terminal
-  const clearTerminal = () => {
-    if (isRunning) return;
-    setTerminal([]);
-  };
+     
 
   return (
-    <Box
-      flex="1"
-      display="flex"
-      flexDirection="column"
-      border="1px solid #00ffcc"
-      borderRadius="6px"
-      boxShadow="0 0 10px #00ffcc"
-      p={3}
-    >
-      {/* HEADER */}
-      <Box display="flex" justifyContent="space-between" mb={2}>
-        <Text fontWeight="bold" color="#00ffcc">
-          🖥 Terminal
-        </Text>
-        <Text
-          fontSize="sm"
-          cursor="pointer"
-          color="#ff4d4f"
-          onClick={clearTerminal}
-        >
+    <Box flex="1" display="flex" flexDirection="column" p={3}>
+      <Box display="flex" justifyContent="space-between">
+        <Text color="#00ffcc">🖥 Terminal</Text>
+        <Text color="red" cursor="pointer" onClick={() => setTerminal([])}>
           Clear
         </Text>
       </Box>
 
-      {/* TERMINAL */}
       <Box
         ref={terminalRef}
         flex="1"
@@ -190,10 +152,6 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
         fontFamily="monospace"
         overflowY="auto"
       >
-        {terminal.length === 0 && (
-          <Text opacity={0.5}>{"> Ready to execute code..."}</Text>
-        )}
-
         {terminal.map((line, i) => (
           <Text key={i}>{line}</Text>
         ))}
@@ -202,44 +160,24 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
           <Box display="flex">
             <Text>{"> "}</Text>
             <input
+              ref={inputRef}
+              autoFocus
+              value={currentInput}
+              onChange={(e) => setCurrentInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleInputSubmit();
+              }}
               style={{
                 background: "black",
                 color: "#00ffcc",
                 border: "none",
                 outline: "none",
                 flex: 1,
-                fontFamily: "monospace",
-              }}
-              value={currentInput}
-              onChange={(e) => setCurrentInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  handleInputSubmit();
-                }
-              }}
-              autoFocus
-            />
-            {/* 🔥 Blinking cursor */}
-            <span
-              style={{
-                width: "8px",
-                background: "#00ffcc",
-                marginLeft: "2px",
-                animation: "blink 1s infinite",
               }}
             />
           </Box>
         )}
       </Box>
-
-      {/* Cursor animation */}
-      <style>
-        {`
-          @keyframes blink {
-            50% { opacity: 0; }
-          }
-        `}
-      </style>
     </Box>
   );
 });

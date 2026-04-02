@@ -53,6 +53,10 @@ import {
   InfoIcon,
 } from "@chakra-ui/icons";
 import { useEffect, useState } from "react";
+import ReplayPreview from "../components/ReplayPreview";
+import ExplainUIMode from "../components/ExplainUIMode";
+import BeforeAfterCompare from "../components/BeforeAfterCompare";
+import HtmlCssPlayground from "./HtmlCssPlayground";
 
 // Custom animations
 const float = keyframes`
@@ -91,6 +95,10 @@ export default function LandingPage({ onLaunch }) {
   const [demoOutput, setDemoOutput] = useState('');
   const [isRunningDemo, setIsRunningDemo] = useState(false);
   const [activeSection, setActiveSection] = useState('home');
+  const [showReplay, setShowReplay] = useState(false);
+  const [showExplainUI, setShowExplainUI] = useState(false);
+  const [showCompare, setShowCompare] = useState(false);
+  const [showHtmlCssPlayground, setShowHtmlCssPlayground] = useState(false);
 
   // Typing animation texts
   const texts = [
@@ -174,6 +182,10 @@ export default function LandingPage({ onLaunch }) {
       setActiveSection(sectionId);
       setMobileMenuOpen(false);
     }
+  };
+
+  const openHtmlCssPlayground = () => {
+    setShowHtmlCssPlayground(true);
   };
 
   const floatingAnimation = prefersReducedMotion ? {} : { animation: `${float} 3s ease-in-out infinite` };
@@ -485,7 +497,7 @@ export default function LandingPage({ onLaunch }) {
               </Text>
             </Box>
 
-            <HStack spacing={4} pt={4}>
+            <HStack spacing={4} pt={4} wrap="wrap" justify="center">
               <Button
                 size="lg"
                 bgGradient="linear(to-r, blue.400, purple.500)"
@@ -497,6 +509,7 @@ export default function LandingPage({ onLaunch }) {
               >
                 Launch Editor — No Login Required
               </Button>
+              
               <Button
                 size="lg"
                 variant="outline"
@@ -505,6 +518,22 @@ export default function LandingPage({ onLaunch }) {
                 onClick={() => scrollToSection('demo')}
               >
                 Try Live Demo
+              </Button>
+
+              <Button
+                size="lg"
+                variant="outline"
+                colorScheme="purple"
+                rightIcon={<EditIcon />}
+                onClick={openHtmlCssPlayground}
+                _hover={{
+                  transform: "scale(1.05)",
+                  bgGradient: "linear(to-r, purple.500, pink.500)",
+                  color: "white",
+                  borderColor: "transparent"
+                }}
+              >
+                🎨 HTML/CSS Playground
               </Button>
             </HStack>
 
@@ -587,6 +616,103 @@ export default function LandingPage({ onLaunch }) {
         </Container>
       </Box>
 
+      <Box id="advanced-features" py={20} position="relative" zIndex={2}>
+        <Container maxW="container.xl">
+          <VStack spacing={12}>
+            <VStack spacing={3}>
+              <Badge colorScheme="orange" fontSize="sm" px={3} py={1} borderRadius="full">
+                🚀 INSANE USP - Features No One Else Has
+              </Badge>
+              <Heading textAlign="center" fontSize="3xl">
+                Revolutionary Features
+              </Heading>
+              <Text textAlign="center" color="gray.500" maxW="700px">
+                These features make us completely unique in the market
+              </Text>
+            </VStack>
+
+            <SimpleGrid columns={{ base: 1, md: 3 }} spacing={8} w="full">
+              {/* Replay Feature Button */}
+              <Box
+                p={6}
+                borderRadius="xl"
+                bgGradient="linear(to-br, purple.500, pink.500)"
+                color="white"
+                textAlign="center"
+                cursor="pointer"
+                transition="all 0.3s"
+                _hover={{ transform: "translateY(-8px)", boxShadow: "2xl" }}
+                onClick={() => setShowReplay(true)}
+              >
+                <Text fontSize="4xl" mb={3}>🎬</Text>
+                <Heading size="md" mb={2}>HTML/CSS Replay</Heading>
+                <Text fontSize="sm" opacity={0.9}>
+                  Watch UI build step-by-step
+                  <br />
+                  <strong>Div appears → styled → animated</strong>
+                </Text>
+                <Button mt={4} size="sm" variant="outline" colorScheme="white">
+                  Try Demo →
+                </Button>
+              </Box>
+
+              {/* Explain UI Feature Button */}
+              <Box
+                p={6}
+                borderRadius="xl"
+                bgGradient="linear(to-br, blue.500, cyan.500)"
+                color="white"
+                textAlign="center"
+                cursor="pointer"
+                transition="all 0.3s"
+                _hover={{ transform: "translateY(-8px)", boxShadow: "2xl" }}
+                onClick={() => setShowExplainUI(true)}
+              >
+                <Text fontSize="4xl" mb={3}>🔍</Text>
+                <Heading size="md" mb={2}>Explain My UI Mode</Heading>
+                <Text fontSize="sm" opacity={0.9}>
+                  Click any element → See CSS applied
+                  <br />
+                  <strong>Like DevTools... but simplified</strong>
+                </Text>
+                <Button mt={4} size="sm" variant="outline" colorScheme="white">
+                  Try Demo →
+                </Button>
+              </Box>
+
+              {/* Before/After Compare Feature Button */}
+              <Box
+                p={6}
+                borderRadius="xl"
+                bgGradient="linear(to-br, green.500, teal.500)"
+                color="white"
+                textAlign="center"
+                cursor="pointer"
+                transition="all 0.3s"
+                _hover={{ transform: "translateY(-8px)", boxShadow: "2xl" }}
+                onClick={() => setShowCompare(true)}
+              >
+                <Text fontSize="4xl" mb={3}>🔄</Text>
+                <Heading size="md" mb={2}>Before vs After Mode</Heading>
+                <Text fontSize="sm" opacity={0.9}>
+                  Split screen comparison
+                  <br />
+                  <strong>Shows actual impact of styling</strong>
+                </Text>
+                <Button mt={4} size="sm" variant="outline" colorScheme="white">
+                  Try Demo →
+                </Button>
+              </Box>
+            </SimpleGrid>
+          </VStack>
+        </Container>
+      </Box>
+
+      {/* Render Modals */}
+      {showReplay && <ReplayPreview onClose={() => setShowReplay(false)} />}
+      {showExplainUI && <ExplainUIMode onClose={() => setShowExplainUI(false)} />}
+      {showCompare && <BeforeAfterCompare onClose={() => setShowCompare(false)} />}
+
       {/* Live Demo Section */}
       <Box id="demo" py={20} position="relative" zIndex={2}>
         <Container maxW="container.lg">
@@ -647,8 +773,6 @@ export default function LandingPage({ onLaunch }) {
                 ⚡ Runs locally in your browser • 0ms latency • No API calls
               </Text>
             </Box>
-
-
           </VStack>
         </Container>
       </Box>
@@ -819,6 +943,22 @@ export default function LandingPage({ onLaunch }) {
           </Box>
         </Container>
       </Box>
+
+      {/* HTML/CSS Playground Modal */}
+      {showHtmlCssPlayground && (
+        <Box
+          position="fixed"
+          top={0}
+          left={0}
+          right={0}
+          bottom={0}
+          zIndex={3000}
+          bg={colorMode === "dark" ? "gray.900" : "gray.50"}
+          overflow="auto"
+        >
+          <HtmlCssPlayground onBack={() => setShowHtmlCssPlayground(false)} />
+        </Box>
+      )}
 
       {/* Footer */}
       <Box py={8} borderTopWidth="1px" borderColor={colorMode === "dark" ? "whiteAlpha.200" : "gray.200"} position="relative" zIndex={2}>

@@ -55,41 +55,44 @@ export const loadPyodideInstance = async () => {
   return pyodide;
 };
 
-export const runPython = async (code, inputs = []) => {
-  try {
-    const py = await loadPyodideInstance();
 
-    // convert array → safe string
-    const safeInput = inputs
-      .map((i) => i.replace(/\\/g, "\\\\").replace(/"/g, '\\"'))
-      .join("\\n");
 
-    // reset Python environment each run
-    py.runPython(`
-import sys
-from io import StringIO
+    export const runPython = async (code, input = []) => {
+      try {
+        const py = await loadPyodideInstance();
 
-sys.stdout = StringIO()
+        const safeInput = input.join("\n");
 
-input_data = """${safeInput}""".split("\\n")
-input_index = 0
+        py.runPython(`
+    import sys
+    from io import StringIO
 
-def input(prompt=""):
-    global input_index
-    if input_index < len(input_data):
-        value = input_data[input_index]
-        input_index += 1
-        return value
-    return ""
-`);
+    sys.stdout = StringIO()
 
-    // execute user code
-    py.runPython(code);
+    input_data = """${safeInput}""".split("\\n")
+    input_index = 0
 
-    const output = py.runPython("sys.stdout.getvalue()");
+    def input(prompt=""):
+        global input_index
+        if input_index < len(input_data):
+            value = input_data[input_index]
+            input_index += 1
+            return value
+        return ""
+    `);
 
-    return output.trim() || "> (no output)";
-  } catch (error) {
-    return "❌ Error: " + error.message;
-  }
-};
+        // ✅ THIS IS THE FIX
+        try {
+          py.runPython(code);
+        } catch (err) {
+          const cleanError = err.message.split("\n").slice(-1)[0];
+          return "❌ Error: " + cleanError;
+        }
+
+        let output = py.runPython("sys.stdout.getvalue()");
+        return output.trim();
+
+      } catch (error) {
+        return "❌ Error: " + error.message;
+      }
+    };
