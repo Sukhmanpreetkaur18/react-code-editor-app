@@ -55,6 +55,7 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
 
   const executeCode = async (userInputs) => {
     const code = editorRef.current.getValue();
+    const start = performance.now();
 
     try {
       let result =
@@ -62,11 +63,19 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
           ? runJavaScript(code, userInputs)
           : await runPython(code, userInputs);
 
+      const end = performance.now();
+      
       appendLine("");
       appendLine(result || "> (no output)");
+
+      appendLine(
+        `⚡ Time: ${(end - start).toFixed(2)} ms | Inputs: ${userInputs.length - 1}`
+      );
     } catch (err) {
       appendLine("❌ Error: " + err.message);
     }
+
+    
 
     setIsRunning(false);
   };
@@ -85,14 +94,17 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
 
       if (prompts.length > 0) {
         setWaitingForInput(true);
-
         appendLine("> Provide input:");
-
         return;
       }
 
       setIsRunning(true);
       await executeCode([]);
+    },
+
+    // ✅ ADD THIS PART (EXPLAIN FEATURE)
+    appendExternalOutput: (text) => {
+      setTerminal((prev) => [...prev, "", text]);
     },
   }));
 
@@ -153,7 +165,9 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
         overflowY="auto"
       >
         {terminal.map((line, i) => (
-          <Text key={i}>{line}</Text>
+          <Text key={i} whiteSpace="pre-line">
+            {line}
+          </Text>
         ))}
 
         {waitingForInput && (

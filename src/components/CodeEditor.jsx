@@ -18,6 +18,7 @@ const CodeEditor = () => {
   const [fileName, setFileName] = useState("");
   const [savedFiles, setSavedFiles] = useState([]);
   const [speed, setSpeed] = useState(1);
+  const [activeLine, setActiveLine] = useState(null);
 
   // 🔥 Load saved files
 
@@ -40,6 +41,25 @@ const CodeEditor = () => {
     const files = JSON.parse(localStorage.getItem("saved-files")) || [];
     setSavedFiles(files);
   }, []);
+
+  useEffect(() => {
+    if (!editorRef.current || activeLine === null) return;
+
+    editorRef.current.deltaDecorations([], [
+      {
+        range: {
+          startLineNumber: activeLine,
+          startColumn: 1,
+          endLineNumber: activeLine,
+          endColumn: 1,
+        },
+        options: {
+          isWholeLine: true,
+          className: "highlight-line",
+        },
+      },
+    ]);
+  }, [activeLine]);
 
   // 🔥 Load code on language change
   useEffect(() => {
@@ -79,6 +99,36 @@ const CodeEditor = () => {
     setFileName("");
   };
 
+  const handleExplain = () => {
+    const code = editorRef.current.getValue();
+
+    let explanation = [];
+
+    if (code.includes("for") || code.includes("while")) {
+      explanation.push("Uses loop to repeat actions");
+    }
+
+    if (code.includes("function") || code.includes("def")) {
+      explanation.push("Contains function definition");
+    }
+
+    if (code.includes("prompt") || code.includes("input")) {
+      explanation.push("Takes user input");
+    }
+
+    if (code.includes("+") || code.includes("-") || code.includes("*")) {
+      explanation.push("Performs calculations");
+    }
+
+    if (explanation.length === 0) {
+      explanation.push("Basic code execution");
+    }
+
+    outputRef.current?.appendExternalOutput(
+      "🧠 Code Explanation:\n\n• " + explanation.join("\n• ")
+    );
+  };
+
   // 📂 LOAD FILE
   const loadFile = (file) => {
     setLanguage(file.language);
@@ -95,47 +145,68 @@ const CodeEditor = () => {
   // ============================
   // 🔁 REPLAY SYSTEM (FINAL FIX)
   // ============================
-
   const startReplay = () => {
-    const code = editorRef.current.getValue();
+    console.log("Replay clicked");
+    if (!editorRef.current) return;
 
-    replayCodeRef.current = code;
+    // stop old replay
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    
+
+    const fullCode = editorRef.current.getValue();
+
+    if (!fullCode) {
+      console.log("No code to replay ❌");
+      return;
+    }
+
+    replayCodeRef.current = fullCode;
     replayIndexRef.current = 0;
 
-    clearInterval(intervalRef.current);
+    editorRef.current.setValue("\n"); // clear editor
 
-    editorRef.current.setValue("");
-
-    const intervalTime = 50 / speed; // ✅ NEW
+    const intervalTime = 50 / speed;
 
     intervalRef.current = setInterval(() => {
+      console.log("Typing:", nextChar);
+
       const nextChar = replayCodeRef.current[replayIndexRef.current];
 
-      if (nextChar !== undefined) {
-        editorRef.current.executeEdits("", [
-          {
-            range: {
-              startLineNumber: editorRef.current.getModel().getLineCount(),
-              startColumn: editorRef.current.getModel().getLineMaxColumn(
-                editorRef.current.getModel().getLineCount()
-              ),
-              endLineNumber: editorRef.current.getModel().getLineCount(),
-              endColumn: editorRef.current.getModel().getLineMaxColumn(
-                editorRef.current.getModel().getLineCount()
-              ),
-            },
-            text: nextChar,
-          },
-        ]);
-
-        replayIndexRef.current++;
-      }
-
-      if (replayIndexRef.current >= replayCodeRef.current.length) {
+      if (nextChar === undefined) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+        setActiveLine(null);
+        return;
       }
-    }, intervalTime); // ✅ use variable
+
+      const position = editorRef.current.getPosition();
+
+      setActiveLine(position.lineNumber);
+      editorRef.current.revealLineInCenter(position.lineNumber);
+
+      editorRef.current.executeEdits("", [
+        {
+          range: {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          },
+          text: nextChar,
+        },
+      ]);
+
+      editorRef.current.setPosition({
+        lineNumber: position.lineNumber,
+        column: position.column + 1,
+      });
+
+      replayIndexRef.current++;
+    }, intervalTime);
   };
 
   const pauseReplay = () => {
@@ -144,7 +215,10 @@ const CodeEditor = () => {
   };
 
   const resumeReplay = () => {
-    if (intervalRef.current) return;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null; // ✅ ADD THIS LINE
+    }
 
     const intervalTime = 50 / speed;
 
@@ -152,21 +226,27 @@ const CodeEditor = () => {
       const nextChar = replayCodeRef.current[replayIndexRef.current];
 
       if (nextChar !== undefined) {
+        const model = editorRef.current.getModel();
+        const lastLine = model.getLineCount();
+        const lastCol = model.getLineMaxColumn(lastLine);
+
         editorRef.current.executeEdits("", [
           {
             range: {
-              startLineNumber: editorRef.current.getModel().getLineCount(),
-              startColumn: editorRef.current.getModel().getLineMaxColumn(
-                editorRef.current.getModel().getLineCount()
-              ),
-              endLineNumber: editorRef.current.getModel().getLineCount(),
-              endColumn: editorRef.current.getModel().getLineMaxColumn(
-                editorRef.current.getModel().getLineCount()
-              ),
+              startLineNumber: lastLine,
+              startColumn: lastCol,
+              endLineNumber: lastLine,
+              endColumn: lastCol,
             },
             text: nextChar,
           },
-        ], true);
+        ]);
+
+      // ✅ CRITICAL FIX (cursor control)
+      editorRef.current.setPosition({
+        lineNumber: lastLine,
+        column: lastCol + 1,
+      });
 
         replayIndexRef.current++;
       }
@@ -251,6 +331,10 @@ const CodeEditor = () => {
         >
           <Button size="sm" colorScheme="teal" onClick={exportFile}>
             ⬇ Export
+          </Button>
+
+          <Button size="sm" onClick={handleExplain}>
+            🧠 Explain
           </Button>
 
           <Button size="sm" colorScheme="yellow" onClick={startReplay}>
