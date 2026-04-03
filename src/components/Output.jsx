@@ -24,7 +24,7 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
     terminalRef.current?.scrollTo(0, terminalRef.current.scrollHeight);
   }, [terminal]);
 
-  // force focus
+  // focus input
   useEffect(() => {
     if (waitingForInput) {
       setTimeout(() => {
@@ -37,17 +37,19 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
     setTerminal((prev) => [...prev, line]);
   };
 
+  // ✅ FIXED REGEX (IMPORTANT)
   const extractPrompts = (code) => {
     const regex =
       language === "javascript"
         ? /prompt\(["'`](.*?)["'`]\)/g
-        : /input\(["'`](.*?)["'`]\)/g;
+        : /input\((.*?)\)/g;
 
     let matches = [];
     let match;
 
     while ((match = regex.exec(code)) !== null) {
-      matches.push(match[1] || "Input:");
+      const text = match[1]?.replace(/["'`]/g, "").trim();
+      matches.push(text || "Input:");
     }
 
     return matches;
@@ -64,18 +66,17 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
           : await runPython(code, userInputs);
 
       const end = performance.now();
-      
+
       appendLine("");
       appendLine(result || "> (no output)");
 
+      // ✅ FIXED INPUT COUNT
       appendLine(
-        `⚡ Time: ${(end - start).toFixed(2)} ms | Inputs: ${userInputs.length - 1}`
+        `⚡ Time: ${(end - start).toFixed(2)} ms | Inputs: ${userInputs.length}`
       );
     } catch (err) {
       appendLine("❌ Error: " + err.message);
     }
-
-    
 
     setIsRunning(false);
   };
@@ -90,6 +91,7 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
 
       const code = editorRef.current.getValue();
       const prompts = extractPrompts(code);
+
       setExpectedInputs(prompts.length);
 
       if (prompts.length > 0) {
@@ -102,9 +104,16 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
       await executeCode([]);
     },
 
-    // ✅ ADD THIS PART (EXPLAIN FEATURE)
+    // explain feature
     appendExternalOutput: (text) => {
-      setTerminal((prev) => [...prev, "", text]);
+      setTerminal((prev) => {
+        // remove old explanation
+        const filtered = prev.filter(
+          (line) => !line.includes("🧠 Code Explanation")
+        );
+
+        return [...filtered, "", text];
+      });
     },
   }));
 
@@ -112,19 +121,20 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
     if (!waitingForInput || isRunning) return;
 
     if (currentInput === "/clear") {
-      setTerminal([]);  
+      setTerminal([]);
       setCurrentInput("");
       return;
     }
 
     appendLine("> " + currentInput);
+
     const newInputs = [...inputs, currentInput];
     setInputs(newInputs);
     setCurrentInput("");
-    // 🔥 detect loop case
+
     const n = parseInt(newInputs[0]);
 
-    // if only 1 prompt → simple case
+    // ✅ CASE 1: single input
     if (expectedInputs === 1) {
       setWaitingForInput(false);
       setIsRunning(true);
@@ -133,18 +143,24 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
       return;
     }
 
-    // 🔥 loop case (n + inputs)
+    // ✅ CASE 2: exact prompt count
+    if (expectedInputs > 1 && newInputs.length === expectedInputs) {
+      setWaitingForInput(false);
+      setIsRunning(true);
+      await executeCode(newInputs);
+      setInputs([]);
+      return;
+    }
+
+    // ✅ CASE 3: loop case (n + values)
     if (!isNaN(n) && newInputs.length === n + 1) {
       setWaitingForInput(false);
       setIsRunning(true);
-
       await executeCode(newInputs);
-
       setInputs([]);
+      return;
     }
   };
-    
-     
 
   return (
     <Box flex="1" display="flex" flexDirection="column" p={3}>

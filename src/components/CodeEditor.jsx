@@ -123,9 +123,12 @@ const CodeEditor = () => {
     if (explanation.length === 0) {
       explanation.push("Basic code execution");
     }
+    
+    // 🔥 clear previous explanation
+    outputRef.current?.appendExternalOutput("");
 
     outputRef.current?.appendExternalOutput(
-      "🧠 Code Explanation:\n\n• " + explanation.join("\n• ")
+      "────────────\n🧠 Code Explanation:\n\n• " + explanation.join("\n• ")
     );
   };
 
@@ -147,6 +150,7 @@ const CodeEditor = () => {
   // ============================
   const startReplay = () => {
     console.log("Replay clicked");
+
     if (!editorRef.current) return;
 
     // stop old replay
@@ -155,26 +159,20 @@ const CodeEditor = () => {
       intervalRef.current = null;
     }
 
-    
-
     const fullCode = editorRef.current.getValue();
-
-    if (!fullCode) {
-      console.log("No code to replay ❌");
-      return;
-    }
+    if (!fullCode) return;
 
     replayCodeRef.current = fullCode;
     replayIndexRef.current = 0;
 
-    editorRef.current.setValue("\n"); // clear editor
+    editorRef.current.setValue("\n"); // important
 
     const intervalTime = 50 / speed;
 
     intervalRef.current = setInterval(() => {
-      console.log("Typing:", nextChar);
-
       const nextChar = replayCodeRef.current[replayIndexRef.current];
+
+      console.log("Typing:", nextChar); // ✅ moved AFTER declaration
 
       if (nextChar === undefined) {
         clearInterval(intervalRef.current);
@@ -183,7 +181,10 @@ const CodeEditor = () => {
         return;
       }
 
-      const position = editorRef.current.getPosition();
+      const position = editorRef.current.getPosition() || {
+        lineNumber: 1,
+        column: 1,
+      };
 
       setActiveLine(position.lineNumber);
       editorRef.current.revealLineInCenter(position.lineNumber);
@@ -210,52 +211,54 @@ const CodeEditor = () => {
   };
 
   const pauseReplay = () => {
-    clearInterval(intervalRef.current);
-    intervalRef.current = null;
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
   };
 
   const resumeReplay = () => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null; // ✅ ADD THIS LINE
-    }
+    if (!replayCodeRef.current || intervalRef.current) return;
 
     const intervalTime = 50 / speed;
 
     intervalRef.current = setInterval(() => {
       const nextChar = replayCodeRef.current[replayIndexRef.current];
 
-      if (nextChar !== undefined) {
-        const model = editorRef.current.getModel();
-        const lastLine = model.getLineCount();
-        const lastCol = model.getLineMaxColumn(lastLine);
-
-        editorRef.current.executeEdits("", [
-          {
-            range: {
-              startLineNumber: lastLine,
-              startColumn: lastCol,
-              endLineNumber: lastLine,
-              endColumn: lastCol,
-            },
-            text: nextChar,
-          },
-        ]);
-
-      // ✅ CRITICAL FIX (cursor control)
-      editorRef.current.setPosition({
-        lineNumber: lastLine,
-        column: lastCol + 1,
-      });
-
-        replayIndexRef.current++;
-      }
-
-      if (replayIndexRef.current >= replayCodeRef.current.length) {
+      if (nextChar === undefined) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
+        setActiveLine(null);
+        return;
       }
-     }, intervalTime);
+
+      const position = editorRef.current.getPosition() || {
+        lineNumber: 1,
+        column: 1,
+      };
+
+      setActiveLine(position.lineNumber);
+      editorRef.current.revealLineInCenter(position.lineNumber);
+
+      editorRef.current.executeEdits("", [
+        {
+          range: {
+            startLineNumber: position.lineNumber,
+            startColumn: position.column,
+            endLineNumber: position.lineNumber,
+            endColumn: position.column,
+          },
+          text: nextChar,
+        },
+      ]);
+
+      editorRef.current.setPosition({
+        lineNumber: position.lineNumber,
+        column: position.column + 1,
+      });
+
+      replayIndexRef.current++;
+    }, intervalTime);
   };
 
   // 📂 UPLOAD FILE
