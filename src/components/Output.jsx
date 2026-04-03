@@ -1,170 +1,182 @@
-import { Box, Button, Text } from "@chakra-ui/react";
+import {
+  forwardRef,
+  useState,
+  useImperativeHandle,
+  useEffect,
+  useRef,
+} from "react";
+import { Box, Text } from "@chakra-ui/react";
 import { runJavaScript, runPython } from "../api";
-import { useState, useImperativeHandle, forwardRef } from "react";
 
 const Output = forwardRef(({ editorRef, language }, ref) => {
-  const [isLoading, setIsLoading] = useState(false);
-
-  // 🔥 TERMINAL STATES
   const [terminal, setTerminal] = useState([]);
   const [currentInput, setCurrentInput] = useState("");
-  const [waitingForInput, setWaitingForInput] = useState(false);
   const [inputs, setInputs] = useState([]);
+  const [waitingForInput, setWaitingForInput] = useState(false);
+  const [isRunning, setIsRunning] = useState(false);
+  const [expectedInputs, setExpectedInputs] = useState(0);
 
-  // 🚀 RUN CODE
-  const runCode = async () => {
-    const sourceCode = editorRef.current.getValue();
-    if (!sourceCode) return;
+  const terminalRef = useRef(null);
+  const inputRef = useRef(null);
 
-    setTerminal([]);
-    setInputs([]);
-    setCurrentInput("");
+  // auto scroll
+  useEffect(() => {
+    terminalRef.current?.scrollTo(0, terminalRef.current.scrollHeight);
+  }, [terminal]);
 
-    // 🔍 detect if input needed
-    if (sourceCode.includes("prompt") || sourceCode.includes("input")) {
-      setWaitingForInput(true);
-      setTerminal(["> Program started..."]);
-      return;
+  // force focus
+  useEffect(() => {
+    if (waitingForInput) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    }
+  }, [waitingForInput]);
+
+  const appendLine = (line) => {
+    setTerminal((prev) => [...prev, line]);
+  };
+
+  const extractPrompts = (code) => {
+    const regex =
+      language === "javascript"
+        ? /prompt\(["'`](.*?)["'`]\)/g
+        : /input\(["'`](.*?)["'`]\)/g;
+
+    let matches = [];
+    let match;
+
+    while ((match = regex.exec(code)) !== null) {
+      matches.push(match[1] || "Input:");
     }
 
-    executeCode(sourceCode, []);
+    return matches;
+  };
+
+  const executeCode = async (userInputs) => {
+    const code = editorRef.current.getValue();
+
+    try {
+      let result =
+        language === "javascript"
+          ? runJavaScript(code, userInputs)
+          : await runPython(code, userInputs);
+
+      appendLine("");
+      appendLine(result || "> (no output)");
+    } catch (err) {
+      appendLine("❌ Error: " + err.message);
+    }
+
+    setIsRunning(false);
   };
 
   useImperativeHandle(ref, () => ({
-    runCode,
-  }));
+    runCode: async () => {
+      if (isRunning) return;
 
-  // ⚙️ EXECUTE CODE
-  const executeCode = async (code, inputsArr) => {
-    try {
-      setIsLoading(true);
+      setTerminal([]);
+      setInputs([]);
+      setCurrentInput("");
 
-      let result;
+      const code = editorRef.current.getValue();
+      const prompts = extractPrompts(code);
+      setExpectedInputs(prompts.length);
 
-      if (language === "javascript") {
-        result = runJavaScript(code, inputsArr.join("\n"));
-      } else if (language === "python") {
-        result = await runPython(code, inputsArr.join("\n"));
+      if (prompts.length > 0) {
+        setWaitingForInput(true);
+
+        appendLine("> Provide input:");
+
+        return;
       }
 
-      // 🔥 API already formats prompts → just print
-      setTerminal((prev) => [...prev, ...result.split("\n")]);
-    } catch (error) {
-      setTerminal((prev) => [...prev, "❌ " + error.message]);
-    } finally {
-      setIsLoading(false);
-      setWaitingForInput(false);
-    }
-  };
+      setIsRunning(true);
+      await executeCode([]);
+    },
+  }));
 
-  // ⌨️ HANDLE INPUT
-  const handleTerminalInput = (e) => {
-    if (e.key === "Enter") {
-      const value = currentInput;
-      const code = editorRef.current.getValue();
+  const handleInputSubmit = async () => {
+    if (!waitingForInput || isRunning) return;
 
-      const expectedInputs =
-        (code.match(/prompt/g) || []).length +
-        (code.match(/input/g) || []).length;
-
-      const updatedInputs = [...inputs, value];
-
+    if (currentInput === "/clear") {
+      setTerminal([]);  
       setCurrentInput("");
-      setInputs(updatedInputs);
+      return;
+    }
 
-      if (updatedInputs.length < expectedInputs) return;
+    appendLine("> " + currentInput);
+    const newInputs = [...inputs, currentInput];
+    setInputs(newInputs);
+    setCurrentInput("");
+    // 🔥 detect loop case
+    const n = parseInt(newInputs[0]);
 
-      executeCode(code, updatedInputs);
+    // if only 1 prompt → simple case
+    if (expectedInputs === 1) {
+      setWaitingForInput(false);
+      setIsRunning(true);
+      await executeCode(newInputs);
+      setInputs([]);
+      return;
+    }
+
+    // 🔥 loop case (n + inputs)
+    if (!isNaN(n) && newInputs.length === n + 1) {
+      setWaitingForInput(false);
+      setIsRunning(true);
+
+      await executeCode(newInputs);
+
+      setInputs([]);
     }
   };
-
-  // 💾 DOWNLOAD CODE
-  const downloadCode = () => {
-    const code = editorRef.current.getValue();
-
-    if (!code) return;
-
-    let extension = "txt";
-    if (language === "javascript") extension = "js";
-    else if (language === "python") extension = "py";
-
-    const blob = new Blob([code], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `code.${extension}`;
-    a.click();
-
-    URL.revokeObjectURL(url);
-  };
+    
+     
 
   return (
-    <Box flex="1" display="flex" flexDirection="column" p={2} gap={2}>
-      {/* TITLE */}
-      <Text fontSize="lg">Output</Text>
-
-      {/* BUTTONS */}
-      <Box display="flex" gap={2}>
-        <Button
-          variant="outline"
-          colorScheme="red"
-          onClick={() => {
-            setTerminal([]);
-            setCurrentInput("");
-            setInputs([]);
-          }}
-        >
+    <Box flex="1" display="flex" flexDirection="column" p={3}>
+      <Box display="flex" justifyContent="space-between">
+        <Text color="#00ffcc">🖥 Terminal</Text>
+        <Text color="red" cursor="pointer" onClick={() => setTerminal([])}>
           Clear
-        </Button>
-
-        <Button variant="outline" colorScheme="blue" onClick={downloadCode}>
-          Download
-        </Button>
+        </Text>
       </Box>
 
-      {/* TERMINAL */}
       <Box
+        ref={terminalRef}
         flex="1"
-        minH="300px"
-        p={3}
         bg="black"
-        color="green.400"
+        color="#00ffcc"
+        p={2}
         fontFamily="monospace"
-        fontSize="14px"
-        border="1px solid #00ffcc"
-        borderRadius="6px"
-        boxShadow="0 0 10px #00ffcc"
         overflowY="auto"
       >
-        {/* EMPTY */}
-        {terminal.length === 0 && "> Click Run to start"}
-
-        {/* OUTPUT */}
         {terminal.map((line, i) => (
-          <div key={i}>{line}</div>
+          <Text key={i}>{line}</Text>
         ))}
 
-        {/* INPUT */}
         {waitingForInput && (
-          <input
-            style={{
-              background: "black",
-              color: "#00ffcc",
-              border: "none",
-              outline: "none",
-              width: "100%",
-              fontFamily: "monospace",
-            }}
-            value={currentInput}
-            onChange={(e) => setCurrentInput(e.target.value)}
-            onKeyDown={handleTerminalInput}
-            autoFocus
-          />
+          <Box display="flex">
+            <Text>{"> "}</Text>
+            <input
+              ref={inputRef}
+              autoFocus
+              value={currentInput}
+              onChange={(e) => setCurrentInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleInputSubmit();
+              }}
+              style={{
+                background: "black",
+                color: "#00ffcc",
+                border: "none",
+                outline: "none",
+                flex: 1,
+              }}
+            />
+          </Box>
         )}
-
-        {/* LOADING */}
-        {isLoading && <div>⏳ Running...</div>}
       </Box>
     </Box>
   );

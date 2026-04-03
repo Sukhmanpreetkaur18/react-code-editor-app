@@ -1,43 +1,38 @@
 // ==========================================
 // 🔥 JavaScript Execution (Offline + Input)
 // ==========================================
-export const runJavaScript = (code, input = "") => {
+export const runJavaScript = (code, inputs = []) => {
   let output = [];
+  let inputIndex = 0;
 
   try {
-    let inputs = input.split("\n");
-    let inputIndex = 0;
-
     const originalLog = console.log;
 
-    // 🔥 capture console.log
+    // capture console.log
     console.log = (...args) => {
       output.push(args.join(" "));
     };
 
-    // 🔥 fake prompt
+    // fake prompt
     const prompt = (msg = "") => {
       const value = inputs[inputIndex++] || "";
-
-      if (msg) output.push(`> ${msg}`);
-      output.push(`> ${value}`);
-
       return value;
     };
 
-    // execute code
-    new Function("prompt", code)(prompt);
+    // execute user code safely
+    new Function("console", "prompt", code)(
+      { log: console.log },
+      prompt
+    );
 
-    // restore console
     console.log = originalLog;
 
-    return output.length
-      ? output.join("\n")
-      : "✅ Code executed successfully!";
+    return output.join("\n") || "> (no output)";
   } catch (error) {
     return "❌ Error: " + error.message;
   }
 };
+
 
 // ==========================================
 // 🐍 Python Execution (Pyodide + Input)
@@ -45,6 +40,7 @@ export const runJavaScript = (code, input = "") => {
 
 let pyodide = null;
 
+// load Pyodide only once
 export const loadPyodideInstance = async () => {
   if (pyodide) return pyodide;
 
@@ -59,40 +55,44 @@ export const loadPyodideInstance = async () => {
   return pyodide;
 };
 
-export const runPython = async (code, input = "") => {
-  try {
-    const py = await loadPyodideInstance();
 
-    // 🔥 escape input safely
-    const safeInput = input.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 
-    py.runPython(`
-import sys
-from io import StringIO
+    export const runPython = async (code, input = []) => {
+      try {
+        const py = await loadPyodideInstance();
 
-input_data = """${safeInput}""".split("\\n")
-input_index = 0
+        const safeInput = input.join("\n");
 
-def input(prompt=""):
-    global input_index
-    if input_index < len(input_data):
-        value = input_data[input_index]
-        input_index += 1
-        if prompt:
-            print("> " + prompt)
-        print("> " + value)
-        return value
-    return ""
+        py.runPython(`
+    import sys
+    from io import StringIO
 
-sys.stdout = StringIO()
+    sys.stdout = StringIO()
+
+    input_data = """${safeInput}""".split("\\n")
+    input_index = 0
+
+    def input(prompt=""):
+        global input_index
+        if input_index < len(input_data):
+            value = input_data[input_index]
+            input_index += 1
+            return value
+        return ""
     `);
 
-    py.runPython(code);
+        // ✅ THIS IS THE FIX
+        try {
+          py.runPython(code);
+        } catch (err) {
+          const cleanError = err.message.split("\n").slice(-1)[0];
+          return "❌ Error: " + cleanError;
+        }
 
-    let output = py.runPython("sys.stdout.getvalue()");
+        let output = py.runPython("sys.stdout.getvalue()");
+        return output.trim();
 
-    return output || "✅ Code executed successfully!";
-  } catch (error) {
-    return "❌ Error: " + error.message;
-  }
-};
+      } catch (error) {
+        return "❌ Error: " + error.message;
+      }
+    };

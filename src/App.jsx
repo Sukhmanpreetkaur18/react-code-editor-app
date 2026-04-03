@@ -1,7 +1,16 @@
 import { Box, Text } from "@chakra-ui/react";
+import { useState } from "react";
 import CodeEditor from "./components/CodeEditor";
+import LandingPage from "./pages/LandingPage.jsx"; 
 
 function App() {
+  const [showLanding, setShowLanding] = useState(true); // 👈 new
+
+  // 👇 if landing page active, show it
+  if (showLanding) {
+    return <LandingPage onLaunch={() => setShowLanding(false)} />;
+  }
+
   return (
     <Box
       h="100vh"
@@ -27,7 +36,7 @@ function App() {
       {/* 🔥 MAIN CONTAINER */}
       <Box
         flex="1"
-        minH={0} // ✅ VERY IMPORTANT (prevents overflow bugs)
+        minH={0}
         border="1px solid rgba(0,255,204,0.2)"
         borderRadius="10px"
         p={2}

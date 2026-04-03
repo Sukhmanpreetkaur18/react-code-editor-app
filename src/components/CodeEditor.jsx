@@ -9,6 +9,8 @@ const CodeEditor = () => {
   const editorRef = useRef();
   const outputRef = useRef();
   const intervalRef = useRef(null);
+  const replayIndexRef = useRef(0);
+  const replayCodeRef = useRef("");
 
   const [language, setLanguage] = useState("javascript");
   const [value, setValue] = useState("");
@@ -16,21 +18,50 @@ const CodeEditor = () => {
   const [savedFiles, setSavedFiles] = useState([]);
   const [speed, setSpeed] = useState(1);
 
-  // 🔥 Load saved files
+  // Load saved files from localStorage
   useEffect(() => {
     const files = JSON.parse(localStorage.getItem("saved-files")) || [];
     setSavedFiles(files);
   }, []);
 
-  // 🔥 Load code on language change
+  // Load code on language change
   useEffect(() => {
     const savedCode = localStorage.getItem(`code-${language}`);
     setValue(savedCode || CODE_SNIPPETS[language]);
   }, [language]);
 
-  const onMount = (editor) => {
+  // Cleanup interval on unmount
+  useEffect(() => {
+    return () => {
+      clearInterval(intervalRef.current);
+    };
+  }, []);
+
+  // Ctrl + Enter keyboard shortcut
+  useEffect(() => {
+    const handleKey = (e) => {
+      if (e.ctrlKey && e.key === "Enter") {
+        if (!editorRef.current || !outputRef.current) return;
+        outputRef.current.runCode();
+      }
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => {
+      window.removeEventListener("keydown", handleKey);
+    };
+  }, []);
+
+  const onMount = (editor, monaco) => {
     editorRef.current = editor;
     editor.focus();
+
+    // Ctrl + Enter in editor
+    editor.addCommand(
+      monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter,
+      () => {
+        outputRef.current?.runCode();
+      }
+    );
   };
 
   const onSelect = (lang) => setLanguage(lang);
@@ -40,56 +71,96 @@ const CodeEditor = () => {
     localStorage.setItem(`code-${language}`, val);
   };
 
-  // 💾 SAVE FILE
+  // Save file
   const saveFile = () => {
     if (!fileName.trim()) return;
 
     const newFile = { name: fileName, language, code: value };
     const updated = [...savedFiles, newFile];
-
     localStorage.setItem("saved-files", JSON.stringify(updated));
     setSavedFiles(updated);
     setFileName("");
   };
 
-  // 📂 LOAD FILE
+  // Load file
   const loadFile = (file) => {
     setLanguage(file.language);
     setValue(file.code);
   };
 
-  // ❌ DELETE FILE
+  // Delete file
   const deleteFile = (index) => {
     const updated = savedFiles.filter((_, i) => i !== index);
     localStorage.setItem("saved-files", JSON.stringify(updated));
     setSavedFiles(updated);
   };
 
-  // 🔁 REPLAY (FIXED)
-  const replayCode = () => {
+  // Replay System
+  const startReplay = () => {
     const code = editorRef.current.getValue();
-    let i = 0;
-
+    replayCodeRef.current = code;
+    replayIndexRef.current = 0;
     clearInterval(intervalRef.current);
-    setValue("");
+    editorRef.current.setValue("");
+
+    const intervalTime = 50 / speed;
 
     intervalRef.current = setInterval(() => {
-      setValue((prev) => prev + (code[i] || ""));
-      i++;
+      const nextChar = replayCodeRef.current[replayIndexRef.current];
 
-      if (i >= code.length) {
-        clearInterval(intervalRef.current);
+      if (nextChar !== undefined) {
+        editorRef.current.executeEdits("", [
+          {
+            range: editorRef.current.getModel().getFullModelRange(),
+            text: editorRef.current.getValue() + nextChar,
+          },
+        ]);
+        replayIndexRef.current++;
       }
-    }, 50 / speed);
+
+      if (replayIndexRef.current >= replayCodeRef.current.length) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }, intervalTime);
   };
 
-  // 📂 UPLOAD FILE
+  const pauseReplay = () => {
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+  };
+
+  const resumeReplay = () => {
+    if (intervalRef.current) return;
+
+    const intervalTime = 50 / speed;
+
+    intervalRef.current = setInterval(() => {
+      const nextChar = replayCodeRef.current[replayIndexRef.current];
+
+      if (nextChar !== undefined) {
+        editorRef.current.executeEdits("", [
+          {
+            range: editorRef.current.getModel().getFullModelRange(),
+            text: editorRef.current.getValue() + nextChar,
+          },
+        ]);
+        replayIndexRef.current++;
+      }
+
+      if (replayIndexRef.current >= replayCodeRef.current.length) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    }, intervalTime);
+  };
+
+  // Upload file
   const uploadFile = (e) => {
     const file = e.target.files[0];
     if (!file) return;
 
     const reader = new FileReader();
-
     reader.onload = (event) => {
       const content = event.target.result;
       const name = file.name.toLowerCase();
@@ -99,39 +170,33 @@ const CodeEditor = () => {
 
       setValue(content);
       setFileName(file.name);
+      localStorage.setItem(`code-${language}`, content);
       e.target.value = null;
     };
-
     reader.readAsText(file);
   };
 
-  // 🔥 EXPORT (clean)
+  // Export file
   const exportFile = () => {
     const code = editorRef.current.getValue();
-
     const data = {
       language,
       code,
       timestamp: new Date().toISOString(),
     };
-
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: "application/json",
     });
-
     const url = URL.createObjectURL(blob);
-
     const a = document.createElement("a");
     a.href = url;
     a.download = "code-export.json";
     a.click();
-
     URL.revokeObjectURL(url);
   };
 
   return (
     <HStack spacing={4} h="100%" align="stretch">
-
       {/* LEFT */}
       <Box
         flex="2"
@@ -144,7 +209,7 @@ const CodeEditor = () => {
       >
         <LanguageSelector language={language} onSelect={onSelect} />
 
-        {/* 🔥 TOOLBAR */}
+        {/* TOOLBAR */}
         <HStack
           mb={3}
           spacing={3}
@@ -157,23 +222,15 @@ const CodeEditor = () => {
           <Button size="sm" colorScheme="teal" onClick={exportFile}>
             ⬇ Export
           </Button>
-
-          <Button size="sm" colorScheme="yellow" onClick={replayCode}>
+          <Button size="sm" colorScheme="yellow" onClick={startReplay}>
             🔁 Replay
           </Button>
-
-          <Button
-            size="sm"
-            colorScheme="orange"
-            onClick={() => clearInterval(intervalRef.current)}
-          >
+          <Button size="sm" colorScheme="orange" onClick={pauseReplay}>
             ⏸ Pause
           </Button>
-
-          <Button size="sm" colorScheme="green" onClick={replayCode}>
+          <Button size="sm" colorScheme="green" onClick={resumeReplay}>
             ▶ Resume
           </Button>
-
           <Button
             size="sm"
             variant="outline"
@@ -181,12 +238,11 @@ const CodeEditor = () => {
           >
             ⚡ {speed}x
           </Button>
-
           <Button
             size="sm"
             bg="#00ffcc"
             color="black"
-            onClick={() => outputRef.current.runCode()}
+            onClick={() => outputRef.current?.runCode()}
           >
             ▶ Run
           </Button>
@@ -200,11 +256,9 @@ const CodeEditor = () => {
             onChange={(e) => setFileName(e.target.value)}
             size="sm"
           />
-
           <Button size="sm" colorScheme="green" onClick={saveFile}>
             Save
           </Button>
-
           <Button
             size="sm"
             bg="#00ffcc"
@@ -213,7 +267,6 @@ const CodeEditor = () => {
           >
             {fileName ? `🔄 ${fileName}` : "📂 Upload"}
           </Button>
-
           <input
             id="fileInput"
             type="file"
@@ -239,7 +292,6 @@ const CodeEditor = () => {
 
       {/* RIGHT */}
       <Box flex="1" display="flex" flexDirection="column" gap={4}>
-
         {/* SAVED FILES */}
         <Box
           p={3}
@@ -252,17 +304,18 @@ const CodeEditor = () => {
           <Text mb={2} fontWeight="bold" color="#00ffcc">
             📂 Saved Files
           </Text>
-
           <VStack align="stretch" spacing={1}>
             {savedFiles.length === 0 && <Text>No files saved</Text>}
-
             {savedFiles.map((file, index) => (
               <HStack key={index} justify="space-between">
                 <Text cursor="pointer" onClick={() => loadFile(file)}>
                   {file.name} ({file.language})
                 </Text>
-
-                <Button size="xs" colorScheme="red" onClick={() => deleteFile(index)}>
+                <Button
+                  size="xs"
+                  colorScheme="red"
+                  onClick={() => deleteFile(index)}
+                >
                   X
                 </Button>
               </HStack>
@@ -273,7 +326,6 @@ const CodeEditor = () => {
         {/* OUTPUT */}
         <Output ref={outputRef} editorRef={editorRef} language={language} />
       </Box>
-
     </HStack>
   );
 };
