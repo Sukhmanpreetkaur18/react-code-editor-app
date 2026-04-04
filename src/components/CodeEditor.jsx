@@ -15,6 +15,11 @@ const CodeEditor = () => {
   const [fileName, setFileName] = useState("");
   const [savedFiles, setSavedFiles] = useState([]);
   const [speed, setSpeed] = useState(1);
+<<<<<<< Updated upstream
+=======
+  const [activeLine, setActiveLine] = useState(null);
+  const [iframeCode, setIframeCode] = useState("");
+>>>>>>> Stashed changes
 
   // 🔥 Load saved files
   useEffect(() => {
@@ -186,7 +191,27 @@ const CodeEditor = () => {
             size="sm"
             bg="#00ffcc"
             color="black"
+<<<<<<< Updated upstream
             onClick={() => outputRef.current.runCode()}
+=======
+            onClick={() => {
+              const code = editorRef.current.getValue();
+
+              // 🔥 SIMPLE & STRONG CONDITION
+              if (language === "html") {
+                setIframeCode(code);
+                return;
+              }
+
+              if (code.includes("<html") || code.includes("<!DOCTYPE")) {
+                setIframeCode(code);
+                return;
+              }
+
+              setIframeCode(""); // clear preview
+              outputRef.current?.runCode();
+            }}
+>>>>>>> Stashed changes
           >
             ▶ Run
           </Button>
@@ -270,7 +295,26 @@ const CodeEditor = () => {
           </VStack>
         </Box>
 
-        {/* OUTPUT */}
+        
+        {iframeCode && (
+          <>
+            <Text color="yellow">PREVIEW LOADED</Text>
+
+            <Box border="2px solid #00ffcc" borderRadius="6px" overflow="hidden">
+              <iframe
+                srcDoc={iframeCode}
+                title="preview"
+                style={{
+                  width: "100%",
+                  height: "300px",
+                  border: "none",
+                }}
+              />
+            </Box>
+          </>
+        )}
+
+    {/* TERMINAL */}
         <Output ref={outputRef} editorRef={editorRef} language={language} />
       </Box>
 

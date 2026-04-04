@@ -1,6 +1,18 @@
+<<<<<<< Updated upstream
 import { Box, Button, Text } from "@chakra-ui/react";
 import { runJavaScript, runPython } from "../api";
 import { useState, useImperativeHandle, forwardRef } from "react";
+=======
+import {
+  forwardRef,
+  useState,
+  useImperativeHandle,
+  useEffect,
+  useRef,
+} from "react";
+import { Box, Text } from "@chakra-ui/react";
+import { runJavaScript, runPython, runHtml, runCss } from "../api";
+>>>>>>> Stashed changes
 
 const Output = forwardRef(({ editorRef, language }, ref) => {
   const [isLoading, setIsLoading] = useState(false);
@@ -9,17 +21,28 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
   const [terminal, setTerminal] = useState([]);
   const [currentInput, setCurrentInput] = useState("");
   const [waitingForInput, setWaitingForInput] = useState(false);
+<<<<<<< Updated upstream
   const [inputs, setInputs] = useState([]);
 
   // 🚀 RUN CODE
   const runCode = async () => {
     const sourceCode = editorRef.current.getValue();
     if (!sourceCode) return;
+=======
+  const [isRunning, setIsRunning] = useState(false);
+  const [expectedInputs, setExpectedInputs] = useState(0);
+  const [iframeHtml, setIframeHtml] = useState("");
+
+  const terminalRef = useRef(null);
+  const inputRef = useRef(null);
+  const iframeRef = useRef(null);
+>>>>>>> Stashed changes
 
     setTerminal([]);
     setInputs([]);
     setCurrentInput("");
 
+<<<<<<< Updated upstream
     // 🔍 detect if input needed
     if (sourceCode.includes("prompt") || sourceCode.includes("input")) {
       setWaitingForInput(true);
@@ -32,6 +55,127 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
 
   useImperativeHandle(ref, () => ({
     runCode,
+=======
+  // focus input
+  useEffect(() => {
+    if (waitingForInput) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 50);
+    }
+  }, [waitingForInput]);
+
+  // Update iframe content when iframeHtml changes
+  useEffect(() => {
+    if (iframeRef.current && iframeHtml) {
+      iframeRef.current.srcdoc = iframeHtml;
+    }
+  }, [iframeHtml]);
+
+  const appendLine = (line) => {
+    setTerminal((prev) => [...prev, line]);
+  };
+
+  // ✅ FIXED REGEX (IMPORTANT)
+  const extractPrompts = (code) => {
+    const regex =
+      language === "javascript"
+        ? /prompt\(["'`](.*?)["'`]\)/g
+        : /input\((.*?)\)/g;
+
+    let matches = [];
+    let match;
+
+    while ((match = regex.exec(code)) !== null) {
+      const text = match[1]?.replace(/["'`]/g, "").trim();
+      matches.push(text || "Input:");
+    }
+
+    return matches;
+  };
+
+  const executeCode = async (userInputs) => {
+    const code = editorRef.current.getValue();
+    const start = performance.now();
+
+    try {
+      let result;
+
+      if (language === "javascript") {
+        result = runJavaScript(code, userInputs);
+      } else if (language === "python") {
+        result = await runPython(code, userInputs);
+      } else if (language === "html") {
+        result = runHtml(code);
+      } else if (language === "css") {
+        result = runCss(code);
+      }
+
+      const end = performance.now();
+
+      // For HTML and CSS, render in iframe
+      if (language === "html" || language === "css") {
+        setIframeHtml(result);
+      } else {
+        // For JavaScript and Python, show terminal output
+        appendLine("");
+        appendLine(result || "> (no output)");
+
+        // ✅ FIXED INPUT COUNT
+        appendLine(
+          `⚡ Time: ${(end - start).toFixed(2)} ms | Inputs: ${userInputs.length}`
+        );
+      }
+    } catch (err) {
+      appendLine("❌ Error: " + err.message);
+    }
+
+    setIsRunning(false);
+  };
+
+  useImperativeHandle(ref, () => ({
+    runCode: async () => {
+      if (isRunning) return;
+
+      setTerminal([]);
+      setInputs([]);
+      setCurrentInput("");
+      setIframeHtml("");
+
+      // For HTML and CSS, don't wait for input
+      if (language === "html" || language === "css") {
+        setIsRunning(true);
+        await executeCode([]);
+        return;
+      }
+
+      const code = editorRef.current.getValue();
+      const prompts = extractPrompts(code);
+
+      setExpectedInputs(prompts.length);
+
+      if (prompts.length > 0) {
+        setWaitingForInput(true);
+        appendLine("> Provide input:");
+        return;
+      }
+
+      setIsRunning(true);
+      await executeCode([]);
+    },
+
+    // explain feature
+    appendExternalOutput: (text) => {
+      setTerminal((prev) => {
+        // remove old explanation
+        const filtered = prev.filter(
+          (line) => !line.includes("🧠 Code Explanation")
+        );
+
+        return [...filtered, "", text];
+      });
+    },
+>>>>>>> Stashed changes
   }));
 
   // ⚙️ EXECUTE CODE
@@ -57,6 +201,7 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
     }
   };
 
+<<<<<<< Updated upstream
   // ⌨️ HANDLE INPUT
   const handleTerminalInput = (e) => {
     if (e.key === "Enter") {
@@ -99,6 +244,113 @@ const Output = forwardRef(({ editorRef, language }, ref) => {
     URL.revokeObjectURL(url);
   };
 
+=======
+  // Render iframe for HTML/CSS, terminal for JavaScript/Python
+  if (language === "html" || language === "css") {
+    return (
+      <Box flex="1" display="flex" flexDirection="column" p={3}>
+        <Box display="flex" justifyContent="space-between">
+          <Text color="#00ffcc">📱 Preview</Text>
+          <Text
+            color="red"
+            cursor="pointer"
+            onClick={() => setIframeHtml("")}
+          >
+            Clear
+          </Text>
+        </Box>
+
+        <Box
+          flex="1"
+          bg="white"
+          border="1px solid #00ffcc"
+          borderRadius="md"
+          overflow="hidden"
+          mt={2}
+        >
+          <iframe
+            ref={iframeRef}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "none",
+              background: "white",
+            }}
+            title="html-preview"
+            sandbox="allow-scripts"
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  // Terminal for JavaScript and Python
+  return (
+    <Box flex="1" display="flex" flexDirection="column" p={3}>
+      <Box display="flex" justifyContent="space-between">
+        <Text color="#00ffcc">🖥 Terminal</Text>
+        <Text color="red" cursor="pointer" onClick={() => setTerminal([])}>
+          Clear
+        </Text>
+      </Box>
+
+      <Box
+        ref={terminalRef}
+        flex="1"
+        bg="black"
+        color="#00ffcc"
+        p={2}
+        fontFamily="monospace"
+        overflowY="auto"
+      >
+        {terminal.map((line, i) => (
+          <Text key={i} whiteSpace="pre-line">
+            {line}
+          </Text>
+        ))}
+
+        {waitingForInput && (
+          <Box display="flex">
+            <Text>{"> "}</Text>
+            <input
+              ref={inputRef}
+              autoFocus
+              value={currentInput}
+              onChange={(e) => setCurrentInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleInputSubmit();
+              }}
+              style={{
+                background: "black",
+                color: "#00ffcc",
+                border: "none",
+                outline: "none",
+                flex: 1,
+              }}
+            />
+          </Box>
+        )}
+      </Box>
+    </Box>
+  );
+});
+
+export default Output;
+      setInputs([]);
+      return;
+    }
+
+    // ✅ CASE 3: loop case (n + values)
+    if (!isNaN(n) && newInputs.length === n + 1) {
+      setWaitingForInput(false);
+      setIsRunning(true);
+      await executeCode(newInputs);
+      setInputs([]);
+      return;
+    }
+  };
+
+>>>>>>> Stashed changes
   return (
     <Box flex="1" display="flex" flexDirection="column" p={2} gap={2}>
       {/* TITLE */}

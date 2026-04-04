@@ -32,6 +32,15 @@ const LanguageSelector = ({ language, onSelect }) => {
               }}
               onClick={() => onSelect(lang)}
             >
+<<<<<<< Updated upstream
+=======
+              {/* ✅ Icons */}
+              {lang === "javascript" && "🟡 "}
+              {lang === "python" && "🐍 "}
+              {lang === "html" && "🌐 "}
+              {lang === "css" && "🎨 "}
+
+>>>>>>> Stashed changes
               {lang}
               &nbsp;
               <Text as="span" color="gray.600" fontSize="sm">
